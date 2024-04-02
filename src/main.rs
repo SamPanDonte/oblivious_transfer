@@ -1,4 +1,7 @@
+use std::thread;
+use local_ip_address::local_ip;
 use eframe::egui::{self, FontId, TextBuffer, TextEdit, Widget};
+use network_interface::{NetworkInterface, NetworkInterfaceConfig};
 use p256::elliptic_curve::{sec1::ToEncodedPoint, PrimeField};
 use p256::elliptic_curve::Field;
 use p256::elliptic_curve::point::AffineCoordinates;
@@ -269,6 +272,18 @@ fn main() -> Result<(), eframe::Error> {
     let m_c = libaes::Cipher::new_256(&k_c).cbc_decrypt(&k_c, e_c.as_slice());
     let message = String::from_utf8(m_c).unwrap();
     println!("m_c: {:?}", message);
+
+    thread::spawn(oblivious_transfer::start);
+
+    let network_interfaces = NetworkInterface::show().unwrap();
+
+    for itf in network_interfaces.iter() {
+        println!("{:?}", itf);
+    }
+
+    let my_local_ip = local_ip().unwrap();
+
+    println!("This is my local IP address: {:?}", my_local_ip);
 
     eframe::run_native(
         "Oblivious Transfer Protocol",
