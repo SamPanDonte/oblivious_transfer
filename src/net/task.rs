@@ -6,7 +6,7 @@ use network_interface::{NetworkInterface, NetworkInterfaceConfig};
 use tokio::net::UdpSocket;
 use tokio::select;
 use tokio::sync::mpsc::{Receiver, Sender};
-use tracing::{error, instrument, warn};
+use tracing::{error, warn};
 
 use super::{Action, Event, Message, NetworkError, Peer, Username};
 
@@ -39,7 +39,6 @@ impl NetworkTask {
 
     /// Run task blocking current thread.
     #[tokio::main(flavor = "current_thread")]
-    #[instrument]
     pub async fn run(mut self) {
         let address = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), self.port);
         let socket = match UdpSocket::bind(address).await {
@@ -83,14 +82,13 @@ impl NetworkTask {
         self.send_event(Event::Error(error)).await;
     }
 
-    #[instrument]
     async fn send_event(&self, event: Event) {
         if let Err(send_error) = self.sender.send(event).await {
             error!("Failed to send error event: {send_error}");
         }
         self.context.request_repaint();
     }
-    
+
     async fn on_packet(
         &mut self,
         socket: &UdpSocket,
@@ -100,6 +98,10 @@ impl NetworkTask {
         let message = Message::try_from(buffer)?;
         match message {
             Message::BroadcastGreet(name) => {
+                if local_ip()? == sender.ip() {
+                    return Ok(());
+                }
+
                 let peer = Peer::new_with_name(sender, name);
                 self.send_event(Event::Connected(peer)).await;
 
@@ -114,6 +116,10 @@ impl NetworkTask {
                 Ok(())
             }
             Message::BroadcastBye => {
+                if local_ip()? == sender.ip() {
+                    return Ok(());
+                }
+
                 self.send_event(Event::Disconnected(sender)).await;
                 Ok(())
             }

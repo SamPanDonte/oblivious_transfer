@@ -1,12 +1,12 @@
 use eframe::egui::{self, FontId, TextBuffer, TextEdit, Widget};
-use p256::elliptic_curve::{PrimeField, sec1::ToEncodedPoint};
-use p256::elliptic_curve::Field;
 use p256::elliptic_curve::point::AffineCoordinates;
+use p256::elliptic_curve::Field;
+use p256::elliptic_curve::{sec1::ToEncodedPoint, PrimeField};
 use p256::ProjectivePoint;
-use rand::{RngCore, thread_rng};
-use sha2::{Digest, Sha256};
+use rand::{thread_rng, RngCore};
 use sha2::digest::generic_array::GenericArray;
-use tracing::Level;
+use sha2::{Digest, Sha256};
+use tracing::{info, Level};
 
 use oblivious_transfer::net::NetworkHost;
 
@@ -70,19 +70,15 @@ impl eframe::App for Application {
         match self.host.as_mut() {
             Some(host) => {
                 while let Some(event) = host.poll_event() {
-                    println!("Event: {:?}", event);
+                    info!("Event: {:?}", event);
                 }
             }
             None => {
-                let x = NetworkHost::new(
+                self.host = Some(NetworkHost::new(
                     ctx.clone(),
                     "TEST".to_string().try_into().unwrap(),
                     12345,
-                );
-                if let Err(err) = x.refresh_hosts() {
-                    println!("Error: {:?}", err);
-                };
-                self.host = Some(x);
+                ));
             }
         }
 

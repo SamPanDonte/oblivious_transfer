@@ -2,6 +2,7 @@ use std::thread::JoinHandle;
 
 use eframe::egui::Context;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
+use tracing::error;
 
 use super::{Action, Event, NetworkError, NetworkTask, Username};
 
@@ -22,6 +23,10 @@ impl NetworkHost {
         let task = NetworkTask::new(action_receiver, event_sender, name, context, port);
         let join_handle = std::thread::spawn(move || task.run());
 
+        if let Err(error) = sender.blocking_send(Action::Broadcast) {
+            error!("Failed to send initial broadcast event: {}", error);
+        }
+
         Self {
             join_handle,
             receiver,
@@ -31,7 +36,6 @@ impl NetworkHost {
 
     /// Broadcast message to receive peers.
     pub fn refresh_hosts(&self) -> Result<(), NetworkError> {
-        println!("Refreshing hosts");
         Ok(self.sender.blocking_send(Action::Broadcast)?)
     }
 
