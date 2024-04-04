@@ -1,17 +1,20 @@
-use std::thread;
-use local_ip_address::local_ip;
 use eframe::egui::{self, FontId, TextBuffer, TextEdit, Widget};
-use network_interface::{NetworkInterface, NetworkInterfaceConfig};
-use p256::elliptic_curve::{sec1::ToEncodedPoint, PrimeField};
+use p256::elliptic_curve::{PrimeField, sec1::ToEncodedPoint};
 use p256::elliptic_curve::Field;
 use p256::elliptic_curve::point::AffineCoordinates;
 use p256::ProjectivePoint;
-use rand::{thread_rng, RngCore};
-use sha2::digest::generic_array::GenericArray;
+use rand::{RngCore, thread_rng};
 use sha2::{Digest, Sha256};
+use sha2::digest::generic_array::GenericArray;
+use tracing::Level;
+
+use oblivious_transfer::net::NetworkHost;
 
 #[derive(PartialEq)]
-enum C { C0, C1 }
+enum C {
+    C0,
+    C1,
+}
 
 struct Application {
     m0: String,
@@ -25,6 +28,7 @@ struct Application {
     b_point: ProjectivePoint,
     e0: Vec<u8>,
     e1: Vec<u8>,
+    host: Option<NetworkHost>,
 }
 
 impl Application {
@@ -46,6 +50,7 @@ impl Application {
             b_point: ProjectivePoint::IDENTITY,
             e0: Vec::new(),
             e1: Vec::new(),
+            host: None,
         }
     }
 }
@@ -59,9 +64,28 @@ fn text_field(text: &mut dyn TextBuffer) -> TextEdit {
         .desired_width(f32::INFINITY)
 }
 
-
 impl eframe::App for Application {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // TODO: Temporary solution for testing purposes.
+        match self.host.as_mut() {
+            Some(host) => {
+                while let Some(event) = host.poll_event() {
+                    println!("Event: {:?}", event);
+                }
+            }
+            None => {
+                let x = NetworkHost::new(
+                    ctx.clone(),
+                    "TEST".to_string().try_into().unwrap(),
+                    12345,
+                );
+                if let Err(err) = x.refresh_hosts() {
+                    println!("Error: {:?}", err);
+                };
+                self.host = Some(x);
+            }
+        }
+
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.collapsing("Alice", |ui| {
                 egui::Grid::new("alice").num_columns(2).show(ui, |ui| {
@@ -99,7 +123,6 @@ impl eframe::App for Application {
                         ui.radio_value(&mut self.c, C::C1, "1");
                     });
                     ui.end_row();
-                    
                 });
             });
             ui.collapsing("Oblivious Transfer Protocol (Alice -> Bob)", |ui| {
@@ -155,7 +178,11 @@ impl eframe::App for Application {
 
                 let gen = p256::ProjectivePoint::GENERATOR;
 
-                self.b_point = if self.c == C::C0 { gen * self.b_scalar } else { self.a_point + gen * self.b_scalar };
+                self.b_point = if self.c == C::C0 {
+                    gen * self.b_scalar
+                } else {
+                    self.a_point + gen * self.b_scalar
+                };
 
                 egui::Grid::new("b_to_a_1").num_columns(2).show(ui, |ui| {
                     let b_point = self.b_point.to_affine();
@@ -222,12 +249,17 @@ impl eframe::App for Application {
                     ui.end_row();
                 });
             });
-
         });
     }
 }
 
 fn main() -> Result<(), eframe::Error> {
+    let subscriber = tracing_subscriber::FmtSubscriber::builder()
+        .with_max_level(Level::TRACE)
+        .finish();
+
+    tracing::subscriber::set_global_default(subscriber).unwrap();
+
     let gen = p256::ProjectivePoint::GENERATOR;
 
     // Alice:
@@ -272,19 +304,6 @@ fn main() -> Result<(), eframe::Error> {
     let m_c = libaes::Cipher::new_256(&k_c).cbc_decrypt(&k_c, e_c.as_slice());
     let message = String::from_utf8(m_c).unwrap();
     println!("m_c: {:?}", message);
-
-    thread::spawn(oblivious_transfer::start);
-
-    let network_interfaces = NetworkInterface::show().unwrap();
-
-    for itf in network_interfaces.iter() {
-        println!("{:?}", itf);
-    }
-
-    let my_local_ip = local_ip().unwrap();
-
-    println!("This is my local IP address: {:?}", my_local_ip);
-
     eframe::run_native(
         "Oblivious Transfer Protocol",
         eframe::NativeOptions::default(),
