@@ -1,4 +1,4 @@
-use std::thread::JoinHandle;
+use std::thread::{self, JoinHandle};
 
 use eframe::egui::Context;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
@@ -17,11 +17,10 @@ pub struct NetworkHost {
 
 impl NetworkHost {
     /// Create a new network host.
-    pub fn new(context: Context, name: Username, port: u16) -> Self {
-        let (sender, action_receiver) = channel(CHANNEL_SIZE);
-        let (event_sender, receiver) = channel(CHANNEL_SIZE);
-        let task = NetworkTask::new(action_receiver, event_sender, name, context, port);
-        let join_handle = std::thread::spawn(move || task.run());
+    pub fn new(ctx: Context, name: Username, port: u16) -> Self {
+        let (sender, action) = channel(CHANNEL_SIZE);
+        let (event, receiver) = channel(CHANNEL_SIZE);
+        let join_handle = thread::spawn(move || NetworkTask::run(action, event, name, ctx, port));
 
         if let Err(error) = sender.blocking_send(Action::Broadcast) {
             error!("Failed to send initial broadcast event: {}", error);
