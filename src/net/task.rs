@@ -1,14 +1,12 @@
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::SocketAddr;
 
 use eframe::egui::Context;
 use local_ip_address::local_ip;
-use network_interface::{NetworkInterface, NetworkInterfaceConfig};
-use tokio::net::UdpSocket;
 use tokio::select;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tracing::{error, warn};
 
-use super::{Action, Event, Message, NetworkError, Peer, Username};
+use super::{Action, Event, Message, NetworkError, OTMPSocket, Peer, Username};
 
 #[derive(Debug)]
 pub(super) struct NetworkTask {
@@ -40,8 +38,7 @@ impl NetworkTask {
     /// Run task blocking current thread.
     #[tokio::main(flavor = "current_thread")]
     pub async fn run(mut self) {
-        let address = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), self.port);
-        let socket = match UdpSocket::bind(address).await {
+        let socket = match OTMPSocket::bind(self.port).await {
             Ok(socket) => socket,
             Err(error) => {
                 warn!("Unable to create socket: {error}");
@@ -50,18 +47,11 @@ impl NetworkTask {
             }
         };
 
-        if let Err(error) = socket.set_broadcast(true) {
-            warn!("Unable to set broadcast: {error}");
-            self.send_error(NetworkError::SocketBindError(error)).await;
-            return;
-        }
-
-        let mut buffer = [0; 2048];
         loop {
             let result = select! {
-                result = socket.recv_from(&mut buffer) => match result {
-                    Ok((size, sender)) => self.on_packet(&socket, &buffer[..size], sender).await,
-                    Err(error) => Err(error.into())
+                result = socket.recv_from() => match result {
+                    Ok((message, sender)) => self.on_packet(&socket, message, sender).await,
+                    Err(error) => Err(error)
                 },
                 action = self.receiver.recv() => match action {
                     Some(action) => self.on_action(&socket, action).await,
@@ -91,11 +81,10 @@ impl NetworkTask {
 
     async fn on_packet(
         &mut self,
-        socket: &UdpSocket,
-        buffer: &[u8],
+        socket: &OTMPSocket,
+        message: Message,
         sender: SocketAddr,
     ) -> Result<(), NetworkError> {
-        let message = Message::try_from(buffer)?;
         match message {
             Message::BroadcastGreet(name) => {
                 if local_ip()? == sender.ip() {
@@ -105,8 +94,8 @@ impl NetworkTask {
                 let peer = Peer::new_with_name(sender, name);
                 self.send_event(Event::Connected(peer)).await;
 
-                let message = Message::BroadcastResponse(self.name.clone()).into_bytes();
-                socket.send_to(&message, sender).await?;
+                let message = Message::BroadcastResponse(self.name.clone());
+                socket.send_to(message, sender).await?;
 
                 Ok(())
             }
@@ -126,35 +115,13 @@ impl NetworkTask {
         }
     }
 
-    async fn on_action(&mut self, socket: &UdpSocket, action: Action) -> Result<(), NetworkError> {
+    async fn on_action(&mut self, socket: &OTMPSocket, action: Action) -> Result<(), NetworkError> {
         match action {
             Action::Broadcast => {
-                let message = Message::BroadcastGreet(self.name.clone()).into_bytes();
-                socket.send_to(&message, get_broadcast(self.port)?).await?;
-                Ok(())
+                let message = Message::BroadcastGreet(self.name.clone());
+                socket.broadcast(message).await
             }
-            Action::Disconnect => {
-                let message = Message::BroadcastBye.into_bytes();
-                socket.send_to(&message, get_broadcast(self.port)?).await?;
-                Ok(())
-            }
+            Action::Disconnect => socket.broadcast(Message::BroadcastBye).await,
         }
     }
-}
-
-fn get_broadcast(port: u16) -> Result<SocketAddr, NetworkError> {
-    let local_address = local_ip()?;
-
-    for interface in NetworkInterface::show()? {
-        for address in interface.addr {
-            if address.ip() == local_address {
-                return address
-                    .broadcast()
-                    .map(|addr| SocketAddr::new(addr, port))
-                    .ok_or(NetworkError::BroadcastAddressNotFound);
-            }
-        }
-    }
-
-    Err(NetworkError::BroadcastAddressNotFound)
 }

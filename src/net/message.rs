@@ -1,6 +1,12 @@
-use thiserror::Error;
+use std::io::{Error, ErrorKind};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
-use super::{Username, UsernameError};
+use local_ip_address::local_ip;
+use network_interface::{NetworkInterface, NetworkInterfaceConfig};
+use thiserror::Error;
+use tokio::net::UdpSocket;
+
+use super::{NetworkError, Username, UsernameError};
 
 static MAGIC_NUMBER: &[u8] = b"OTMP"; // Oblivious Transfer Message Protocol
 static HEADER_SIZE: usize = 7; // 4 - magic number, 1 - message type, 2 - message length
@@ -97,4 +103,59 @@ impl TryFrom<&[u8]> for Message {
             _ => Err(MessageError::InvalidMessageType),
         }
     }
+}
+
+/// Oblivious Transfer Message Protocol socket.
+#[derive(Debug)]
+pub(super) struct OTMPSocket(UdpSocket, u16);
+
+impl OTMPSocket {
+    /// Bind to a port.
+    /// The Socket is set to broadcast mode.
+    pub async fn bind(port: u16) -> Result<Self, std::io::Error> {
+        let address = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), port);
+        let socket = UdpSocket::bind(address).await?;
+        socket.set_broadcast(true)?;
+        Ok(Self(socket, port))
+    }
+
+    /// Send a message to a specific address.
+    pub async fn send_to(&self, message: Message, address: SocketAddr) -> Result<(), Error> {
+        let bytes = message.into_bytes();
+        let size = self.0.send_to(&bytes, address).await?;
+        if size != bytes.len() {
+            return Err(Error::new(ErrorKind::Other, "Failed to send all bytes"));
+        }
+        Ok(())
+    }
+
+    /// Broadcast a message.
+    pub async fn broadcast(&self, message: Message) -> Result<(), NetworkError> {
+        self.send_to(message, get_broadcast(self.1)?).await?;
+        Ok(())
+    }
+
+    /// Receive a message with the sender address.
+    pub async fn recv_from(&self) -> Result<(Message, SocketAddr), NetworkError> {
+        let mut buffer = vec![0; 1024];
+        let (size, address) = self.0.recv_from(&mut buffer).await?;
+        Ok((Message::try_from(&buffer[..size])?, address))
+    }
+}
+
+fn get_broadcast(port: u16) -> Result<SocketAddr, NetworkError> {
+    let local_address = local_ip()?;
+
+    for interface in NetworkInterface::show()? {
+        for address in interface.addr {
+            if address.ip() == local_address {
+                return address
+                    .broadcast()
+                    .map(|addr| SocketAddr::new(addr, port))
+                    .ok_or(NetworkError::BroadcastAddressNotFound);
+            }
+        }
+    }
+
+    Err(NetworkError::BroadcastAddressNotFound)
 }
