@@ -88,7 +88,7 @@ impl NetworkTask {
     async fn on_packet(&self, message: Message, sender: SocketAddr) -> Result<(), NetworkError> {
         match message {
             Message::BroadcastGreet(name) => {
-                if local_ip()? == sender.ip() {
+                if local_ip()? != sender.ip() {
                     let peer = Peer::new_with_name(sender, name);
                     self.send_event(Event::Connected(peer)).await;
 

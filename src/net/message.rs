@@ -5,6 +5,7 @@ use local_ip_address::local_ip;
 use network_interface::{NetworkInterface, NetworkInterfaceConfig};
 use thiserror::Error;
 use tokio::net::UdpSocket;
+use tracing::{info, warn};
 
 use super::{NetworkError, Username, UsernameError};
 
@@ -121,9 +122,11 @@ impl OTMPSocket {
 
     /// Send a message to a specific address.
     pub async fn send_to(&self, message: Message, address: SocketAddr) -> Result<(), Error> {
+        info!("Sending message: {message:?} to address: {address}");
         let bytes = message.into_bytes();
         let size = self.0.send_to(&bytes, address).await?;
         if size != bytes.len() {
+            warn!("Failed to send all bytes to address: {address}");
             return Err(Error::new(ErrorKind::Other, "Failed to send all bytes"));
         }
         Ok(())
@@ -139,7 +142,9 @@ impl OTMPSocket {
     pub async fn recv_from(&self) -> Result<(Message, SocketAddr), NetworkError> {
         let mut buffer = vec![0; 1024];
         let (size, address) = self.0.recv_from(&mut buffer).await?;
-        Ok((Message::try_from(&buffer[..size])?, address))
+        let message = Message::try_from(&buffer[..size])?;
+        info!("Received message: {message:?} from address: {address}");
+        Ok((message, address))
     }
 }
 
