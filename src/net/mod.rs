@@ -4,11 +4,13 @@ use thiserror::Error;
 use tokio::sync::mpsc::error::SendError;
 
 pub use connection::*;
+use crypto::*;
 use message::*;
 pub use peer::*;
 use task::*;
 
 mod connection;
+mod crypto;
 mod message;
 mod peer;
 mod task;
@@ -31,6 +33,8 @@ pub enum NetworkError {
     InternetInterfaceError(#[from] network_interface::Error),
     #[error("Failed to retrieve local broadcast address")]
     BroadcastAddressNotFound,
+    #[error("Received incorrect message from {0}")]
+    IncorrectMessage(SocketAddr),
 }
 
 impl From<SendError<Action>> for NetworkError {
@@ -45,6 +49,7 @@ pub enum Event {
     Error(NetworkError),
     Connected(Peer),
     Disconnected(SocketAddr),
+    Message(String),
 }
 
 /// Actions user can perform.

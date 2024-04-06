@@ -3,11 +3,13 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 use local_ip_address::local_ip;
 use network_interface::{NetworkInterface, NetworkInterfaceConfig};
+use p256::elliptic_curve::sec1::{EncodedPoint, FromEncodedPoint, ToEncodedPoint};
+use p256::{NistP256, ProjectivePoint as CurvePoint};
 use thiserror::Error;
 use tokio::net::UdpSocket;
 use tracing::{info, warn};
 
-use super::{NetworkError, Username, UsernameError};
+use super::{CryptoError, NetworkError, Username, UsernameError};
 
 static MAGIC_NUMBER: &[u8] = b"OTMP"; // Oblivious Transfer Message Protocol
 static HEADER_SIZE: usize = 7; // 4 - magic number, 1 - message type, 2 - message length
@@ -27,6 +29,8 @@ pub enum MessageError {
     InvalidUtf8(#[from] std::string::FromUtf8Error),
     #[error("Greeting name is invalid: {0}")]
     InvalidUsername(#[from] UsernameError),
+    #[error("Crypto error: {0}")]
+    InvalidCrypto(#[from] CryptoError),
 }
 
 /// Protocol messages.
@@ -35,6 +39,9 @@ pub enum Message {
     BroadcastGreet(Username),
     BroadcastResponse(Username),
     BroadcastBye,
+    Greet(CurvePoint),
+    Response(CurvePoint),
+    Data(Vec<u8>, Vec<u8>),
 }
 
 impl Message {
@@ -44,28 +51,46 @@ impl Message {
     }
 }
 
-fn buffer(type_byte: u8, size: usize) -> Vec<u8> {
-    let mut buffer = Vec::with_capacity(HEADER_SIZE + size);
+fn buffer(type_byte: u8, data: &[u8]) -> Vec<u8> {
+    let mut buffer = Vec::with_capacity(HEADER_SIZE + data.len());
     buffer.extend_from_slice(MAGIC_NUMBER);
     buffer.push(type_byte);
-    buffer.extend_from_slice(&(size as u16).to_be_bytes());
+    buffer.extend_from_slice(&(data.len() as u16).to_be_bytes());
+    buffer.extend_from_slice(data);
     buffer
+}
+
+fn point_to_bytes(point: CurvePoint) -> Vec<u8> {
+    let encoded = point.to_encoded_point(true);
+    encoded.as_bytes().to_vec()
+}
+
+fn bytes_to_point(bytes: &[u8]) -> Result<CurvePoint, CryptoError> {
+    let encoded =
+        EncodedPoint::<NistP256>::from_bytes(bytes).map_err(|_| CryptoError::InvalidPoint)?;
+    let option = CurvePoint::from_encoded_point(&encoded);
+    if option.is_some().into() {
+        Ok(option.unwrap())
+    } else {
+        Err(CryptoError::InvalidPoint)
+    }
 }
 
 impl From<Message> for Vec<u8> {
     fn from(value: Message) -> Self {
         match value {
-            Message::BroadcastGreet(username) => {
-                let mut buffer = buffer(0, username.len());
-                buffer.extend_from_slice(username.as_bytes());
-                buffer
+            Message::BroadcastGreet(username) => buffer(0, username.as_bytes()),
+            Message::BroadcastResponse(username) => buffer(1, username.as_bytes()),
+            Message::BroadcastBye => buffer(2, &[]),
+            Message::Greet(point) => buffer(3, &point_to_bytes(point)),
+            Message::Response(point) => buffer(4, &point_to_bytes(point)),
+            Message::Data(m0, m1) => {
+                let mut buf = Vec::with_capacity(2 + m0.len() + m1.len());
+                buf.extend_from_slice(&(m0.len() as u16).to_be_bytes());
+                buf.extend_from_slice(&m0);
+                buf.extend_from_slice(&m1);
+                buffer(5, &buf)
             }
-            Message::BroadcastResponse(username) => {
-                let mut buffer = buffer(1, username.len());
-                buffer.extend_from_slice(username.as_bytes());
-                buffer
-            }
-            Message::BroadcastBye => buffer(2, 0),
         }
     }
 }
@@ -101,6 +126,22 @@ impl TryFrom<&[u8]> for Message {
                 0 => Ok(Message::BroadcastBye),
                 _ => Err(MessageError::InvalidMessageLength),
             },
+            3 => Ok(Message::Greet(bytes_to_point(&value[HEADER_SIZE..])?)),
+            4 => Ok(Message::Response(bytes_to_point(&value[HEADER_SIZE..])?)),
+            5 => {
+                let mut len = [0; 8];
+                len[6] = value[HEADER_SIZE];
+                len[7] = value[HEADER_SIZE + 1];
+                let len = usize::from_be_bytes(len);
+
+                if len > size - 2 {
+                    return Err(MessageError::InvalidMessageLength);
+                }
+
+                let m0 = value[HEADER_SIZE + 2..HEADER_SIZE + 2 + len].to_vec();
+                let m1 = value[HEADER_SIZE + 2 + len..].to_vec();
+                Ok(Message::Data(m0, m1))
+            }
             _ => Err(MessageError::InvalidMessageType),
         }
     }
@@ -140,7 +181,7 @@ impl OTMPSocket {
 
     /// Receive a message with the sender address.
     pub async fn recv_from(&self) -> Result<(Message, SocketAddr), NetworkError> {
-        let mut buffer = vec![0; 1024];
+        let mut buffer = [0; 2048];
         let (size, address) = self.0.recv_from(&mut buffer).await?;
         let message = Message::try_from(&buffer[..size])?;
         info!("Received message: {message:?} from address: {address}");

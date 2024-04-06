@@ -89,6 +89,7 @@ impl eframe::App for Application {
                     }
                     Event::Connected(peer) => self.peer_panel.add_peer(peer),
                     Event::Disconnected(address) => self.peer_panel.remove_peer(&address),
+                    Event::Message(m) => error!("Message: {m}"), // TODO: implement GUI
                 }
             }
         }

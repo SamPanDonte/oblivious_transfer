@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::net::SocketAddr;
 
 use eframe::egui::Context;
@@ -6,10 +7,11 @@ use tokio::select;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tracing::{error, warn};
 
-use super::{Action, Event, Message, NetworkError, OTMPSocket, Peer, Username};
+use super::{Action, Event, Message, MessageState, NetworkError, OTMPSocket, Peer, Username};
 
 #[derive(Debug)]
 pub(super) struct NetworkTask {
+    states: HashMap<SocketAddr, MessageState>,
     receiver: Receiver<Action>,
     sender: Sender<Event>,
     socket: OTMPSocket,
@@ -37,6 +39,7 @@ impl NetworkTask {
         };
 
         let task = Self {
+            states: HashMap::new(),
             receiver,
             sender,
             socket,
@@ -85,29 +88,65 @@ impl NetworkTask {
         self.context.request_repaint();
     }
 
-    async fn on_packet(&self, message: Message, sender: SocketAddr) -> Result<(), NetworkError> {
+    async fn on_packet(&mut self, message: Message, addr: SocketAddr) -> Result<(), NetworkError> {
         match message {
             Message::BroadcastGreet(name) => {
-                if local_ip()? != sender.ip() {
-                    let peer = Peer::new_with_name(sender, name);
+                if local_ip()? != addr.ip() {
+                    let peer = Peer::new_with_name(addr, name);
                     self.send_event(Event::Connected(peer)).await;
 
                     let message = Message::BroadcastResponse(self.name.clone());
-                    self.socket.send_to(message, sender).await?;
+                    self.socket.send_to(message, addr).await?;
+
+                    // TODO: temporary test
+                    let (a, b) = MessageState::send_message(
+                        (self.name.to_string() + "0").try_into().unwrap(),
+                        (self.name.to_string() + "1").try_into().unwrap(),
+                    );
+                    self.states.insert(addr, b);
+                    self.socket.send_to(Message::Greet(a), addr).await?;
+                    // End temporary test
                 }
                 Ok(())
             }
             Message::BroadcastResponse(name) => {
-                let peer = Peer::new_with_name(sender, name);
+                let peer = Peer::new_with_name(addr, name);
                 self.send_event(Event::Connected(peer)).await;
                 Ok(())
             }
             Message::BroadcastBye => {
-                if local_ip()? != sender.ip() {
-                    self.send_event(Event::Disconnected(sender)).await;
+                if local_ip()? != addr.ip() {
+                    self.send_event(Event::Disconnected(addr)).await;
                 }
                 Ok(())
             }
+            Message::Greet(point) => {
+                let (response, state) = MessageState::on_greeting(point);
+                self.states.insert(addr, state);
+                let response = Message::Response(response);
+                self.socket.send_to(response, addr).await?;
+                Ok(())
+            }
+            Message::Response(point) => match self.states.remove(&addr) {
+                Some(state) => {
+                    let (m0, m1) = state
+                        .on_response(point)
+                        .map_err(|_| NetworkError::IncorrectMessage(addr))?;
+                    self.socket.send_to(Message::Data(m0, m1), addr).await?;
+                    Ok(())
+                }
+                None => Err(NetworkError::IncorrectMessage(addr)),
+            },
+            Message::Data(m0, m1) => match self.states.remove(&addr) {
+                Some(state) => {
+                    let message = state
+                        .on_messages(m0, m1)
+                        .map_err(|_| NetworkError::IncorrectMessage(addr))?;
+                    self.send_event(Event::Message(message)).await;
+                    Ok(())
+                }
+                None => Err(NetworkError::IncorrectMessage(addr)),
+            },
         }
     }
 
