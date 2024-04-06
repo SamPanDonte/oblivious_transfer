@@ -48,17 +48,24 @@ impl NetworkTask {
     }
 
     async fn main_loop(mut self) {
-        loop {
+        let mut running = true;
+        while running {
             let result = select! {
                 result = self.socket.recv_from() => match result {
                     Ok((message, sender)) => self.on_packet(message, sender).await,
                     Err(error) => Err(error)
                 },
                 action = self.receiver.recv() => match action {
-                    Some(action) => self.on_action(action).await,
+                    Some(action) => {
+                        if let Action::Disconnect = action {
+                            running = false;
+                        }
+                        self.on_action(action).await
+                    }
                     None => {
                         error!("Action channel closed before disconnect");
-                        break;
+                        running = false;
+                        Ok(())
                     }
                 }
             };

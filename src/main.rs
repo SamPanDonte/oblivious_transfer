@@ -1,14 +1,15 @@
-use eframe::egui::{self, FontId, TextBuffer, TextEdit, Widget};
-use p256::elliptic_curve::point::AffineCoordinates;
+use eframe::egui::{self, Align2, FontId, TextBuffer, TextEdit, Widget, WidgetText};
+use egui_toast::{Toast, ToastKind, ToastOptions, Toasts};
+use p256::elliptic_curve::{PrimeField, sec1::ToEncodedPoint};
 use p256::elliptic_curve::Field;
-use p256::elliptic_curve::{sec1::ToEncodedPoint, PrimeField};
+use p256::elliptic_curve::point::AffineCoordinates;
 use p256::ProjectivePoint;
-use rand::{thread_rng, RngCore};
-use sha2::digest::generic_array::GenericArray;
+use rand::{RngCore, thread_rng};
 use sha2::{Digest, Sha256};
-use tracing::{info, Level};
+use sha2::digest::generic_array::GenericArray;
+use tracing::Level;
 
-use oblivious_transfer::net::NetworkHost;
+use oblivious_transfer::gui::TopPanel;
 
 #[derive(PartialEq)]
 enum C {
@@ -28,7 +29,8 @@ struct Application {
     b_point: ProjectivePoint,
     e0: Vec<u8>,
     e1: Vec<u8>,
-    host: Option<NetworkHost>,
+    top_panel: TopPanel,
+    toast: Toasts,
 }
 
 impl Application {
@@ -50,7 +52,10 @@ impl Application {
             b_point: ProjectivePoint::IDENTITY,
             e0: Vec::new(),
             e1: Vec::new(),
-            host: None,
+            top_panel: Default::default(),
+            toast: Toasts::new()
+                .anchor(Align2::RIGHT_BOTTOM, (-20.0, -20.0))
+                .direction(egui::Direction::BottomUp),
         }
     }
 }
@@ -66,21 +71,15 @@ fn text_field(text: &mut dyn TextBuffer) -> TextEdit {
 
 impl eframe::App for Application {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // TODO: Temporary solution for testing purposes.
-        match self.host.as_mut() {
-            Some(host) => {
-                while let Some(event) = host.poll_event() {
-                    info!("Event: {:?}", event);
-                }
+        egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
+            if let Err(error) = self.top_panel.draw(ui) {
+                self.toast.add(Toast {
+                    kind: ToastKind::Error,
+                    text: WidgetText::from(error.to_string()),
+                    options: ToastOptions::default().duration_in_seconds(3.0),
+                });
             }
-            None => {
-                self.host = Some(NetworkHost::new(
-                    ctx.clone(),
-                    "TEST".to_string().try_into().unwrap(),
-                    12345,
-                ));
-            }
-        }
+        });
 
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.collapsing("Alice", |ui| {
@@ -141,7 +140,7 @@ impl eframe::App for Application {
                 let abytes: [u8; 32] = abytes.try_into().unwrap();
                 let abytes = GenericArray::from_slice(&abytes);
                 self.a_scalar = p256::Scalar::from_repr(*abytes).unwrap();
-                self.a_point = p256::ProjectivePoint::GENERATOR * self.a_scalar;
+                self.a_point = ProjectivePoint::GENERATOR * self.a_scalar;
 
                 egui::Grid::new("a_to_b_1").num_columns(2).show(ui, |ui| {
                     let a_point = self.a_point.to_affine();
@@ -172,7 +171,7 @@ impl eframe::App for Application {
                 let bbytes = GenericArray::from_slice(&bbytes);
                 self.b_scalar = p256::Scalar::from_repr(*bbytes).unwrap();
 
-                let gen = p256::ProjectivePoint::GENERATOR;
+                let gen = ProjectivePoint::GENERATOR;
 
                 self.b_point = if self.c == C::C0 {
                     gen * self.b_scalar
@@ -246,6 +245,8 @@ impl eframe::App for Application {
                 });
             });
         });
+
+        self.toast.show(ctx);
     }
 }
 
@@ -256,7 +257,7 @@ fn main() -> Result<(), eframe::Error> {
 
     tracing::subscriber::set_global_default(subscriber).unwrap();
 
-    let gen = p256::ProjectivePoint::GENERATOR;
+    let gen = ProjectivePoint::GENERATOR;
 
     // Alice:
     let a = p256::Scalar::random(thread_rng());

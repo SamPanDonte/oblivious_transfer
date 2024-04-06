@@ -1,4 +1,4 @@
-use std::thread::{self, JoinHandle};
+use std::thread::{JoinHandle, spawn};
 
 use eframe::egui::Context;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
@@ -9,10 +9,12 @@ use super::{Action, Event, NetworkError, NetworkTask, Username};
 static CHANNEL_SIZE: usize = 100;
 
 /// Peer to peer network implementation.
+#[derive(Debug)]
 pub struct NetworkHost {
     join_handle: JoinHandle<()>,
     receiver: Receiver<Event>,
     sender: Sender<Action>,
+    name: Username,
 }
 
 impl NetworkHost {
@@ -20,7 +22,8 @@ impl NetworkHost {
     pub fn new(ctx: Context, name: Username, port: u16) -> Self {
         let (sender, action) = channel(CHANNEL_SIZE);
         let (event, receiver) = channel(CHANNEL_SIZE);
-        let join_handle = thread::spawn(move || NetworkTask::run(action, event, name, ctx, port));
+        let username = name.clone();
+        let join_handle = spawn(move || NetworkTask::run(action, event, username, ctx, port));
 
         if let Err(error) = sender.blocking_send(Action::Broadcast) {
             error!("Failed to send initial broadcast event: {}", error);
@@ -30,6 +33,7 @@ impl NetworkHost {
             join_handle,
             receiver,
             sender,
+            name,
         }
     }
 
@@ -52,5 +56,10 @@ impl NetworkHost {
     /// Poll for network events.
     pub fn poll_event(&mut self) -> Option<Event> {
         self.receiver.try_recv().ok()
+    }
+
+    /// Get the username of the network host.
+    pub fn name(&self) -> &str {
+        &self.name
     }
 }

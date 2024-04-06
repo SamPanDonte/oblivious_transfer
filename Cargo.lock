@@ -1010,6 +1010,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "egui-toast"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d35b823ed2488732e085cb1abd1144f23f9546e5c89f4492047c123d27a1a826"
+dependencies = [
+ "egui",
+]
+
+[[package]]
 name = "egui-wgpu"
 version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2152,6 +2161,7 @@ name = "oblivious_transfer"
 version = "0.1.0"
 dependencies = [
  "eframe",
+ "egui-toast",
  "hex",
  "libaes",
  "local-ip-address",
