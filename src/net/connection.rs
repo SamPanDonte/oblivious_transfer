@@ -14,7 +14,7 @@ pub enum UsernameError {
 
 /// Peer username. Has between 1 and 100 characters.
 #[repr(transparent)]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Username(String);
 
 impl Username {
@@ -50,8 +50,14 @@ impl Deref for Username {
     }
 }
 
+impl std::fmt::Display for Username {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 /// Peer to peer network user.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Peer {
     address: SocketAddr,
     name: Option<Username>,
@@ -82,5 +88,14 @@ impl Peer {
     /// Get the name of the peer.
     pub fn name(&self) -> Option<&Username> {
         self.name.as_ref()
+    }
+}
+
+impl std::fmt::Display for Peer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.name {
+            Some(name) => write!(f, "{name} ({})", self.address.ip()),
+            None => write!(f, "{}", self.address),
+        }
     }
 }

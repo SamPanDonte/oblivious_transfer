@@ -7,9 +7,10 @@ use p256::ProjectivePoint;
 use rand::{RngCore, thread_rng};
 use sha2::{Digest, Sha256};
 use sha2::digest::generic_array::GenericArray;
-use tracing::Level;
+use tracing::{error, Level};
 
-use oblivious_transfer::gui::TopPanel;
+use oblivious_transfer::gui::{PeerPanel, PeerPanelAction, TopPanel};
+use oblivious_transfer::net::{Event, NetworkError};
 
 #[derive(PartialEq)]
 enum C {
@@ -30,6 +31,7 @@ struct Application {
     e0: Vec<u8>,
     e1: Vec<u8>,
     top_panel: TopPanel,
+    peer_panel: PeerPanel,
     toast: Toasts,
 }
 
@@ -53,6 +55,7 @@ impl Application {
             e0: Vec::new(),
             e1: Vec::new(),
             top_panel: Default::default(),
+            peer_panel: Default::default(),
             toast: Toasts::new()
                 .anchor(Align2::RIGHT_BOTTOM, (-20.0, -20.0))
                 .direction(egui::Direction::BottomUp),
@@ -71,6 +74,25 @@ fn text_field(text: &mut dyn TextBuffer) -> TextEdit {
 
 impl eframe::App for Application {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if let Some(host) = self.top_panel.get_network_host() {
+            while let Some(event) = host.poll_event() {
+                match event {
+                    Event::Error(error) => {
+                        self.toast.add(Toast {
+                            kind: ToastKind::Error,
+                            text: WidgetText::from(error.to_string()),
+                            options: ToastOptions::default().duration_in_seconds(3.0),
+                        });
+                        if let NetworkError::SocketBindError(error) = error {
+                            error!("Unable to connect: {error}");
+                        }
+                    }
+                    Event::Connected(peer) => self.peer_panel.add_peer(peer),
+                    Event::Disconnected(address) => self.peer_panel.remove_peer(&address),
+                }
+            }
+        }
+
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             if let Err(error) = self.top_panel.draw(ui) {
                 self.toast.add(Toast {
@@ -80,6 +102,26 @@ impl eframe::App for Application {
                 });
             }
         });
+
+        if self.top_panel.get_network_host().is_some() {
+            egui::SidePanel::left("peer_panel").show(ctx, |ui| match self.peer_panel.draw(ui) {
+                PeerPanelAction::PeerClicked(_) => {}
+                PeerPanelAction::RefreshPeers => {
+                    if let Some(host) = self.top_panel.get_network_host() {
+                        if let Err(error) = host.refresh_hosts() {
+                            self.toast.add(Toast {
+                                kind: ToastKind::Error,
+                                text: WidgetText::from(error.to_string()),
+                                options: ToastOptions::default().duration_in_seconds(3.0),
+                            });
+                        }
+                    }
+                }
+                PeerPanelAction::None => {}
+            });
+        } else {
+            self.peer_panel.clear_peers();
+        }
 
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.collapsing("Alice", |ui| {
