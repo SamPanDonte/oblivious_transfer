@@ -97,15 +97,6 @@ impl NetworkTask {
 
                     let message = Message::BroadcastResponse(self.name.clone());
                     self.socket.send_to(message, addr).await?;
-
-                    // TODO: temporary test
-                    let (a, b) = MessageState::send_message(
-                        (self.name.to_string() + "0").try_into().unwrap(),
-                        (self.name.to_string() + "1").try_into().unwrap(),
-                    );
-                    self.states.insert(addr, b);
-                    self.socket.send_to(Message::Greet(a), addr).await?;
-                    // End temporary test
                 }
                 Ok(())
             }
@@ -142,7 +133,7 @@ impl NetworkTask {
                     let message = state
                         .on_messages(m0, m1)
                         .map_err(|_| NetworkError::IncorrectMessage(addr))?;
-                    self.send_event(Event::Message(message)).await;
+                    self.send_event(Event::Message(addr, message)).await;
                     Ok(())
                 }
                 None => Err(NetworkError::IncorrectMessage(addr)),
@@ -150,13 +141,19 @@ impl NetworkTask {
         }
     }
 
-    async fn on_action(&self, action: Action) -> Result<(), NetworkError> {
+    async fn on_action(&mut self, action: Action) -> Result<(), NetworkError> {
         match action {
             Action::Broadcast => {
                 let message = Message::BroadcastGreet(self.name.clone());
                 self.socket.broadcast(message).await
             }
             Action::Disconnect => self.socket.broadcast(Message::BroadcastBye).await,
+            Action::Send(addr, m0, m1) => {
+                let (message, state) = MessageState::send_message(m0, m1);
+                self.states.insert(addr, state);
+                self.socket.send_to(Message::Greet(message), addr).await?;
+                Ok(())
+            }
         }
     }
 }

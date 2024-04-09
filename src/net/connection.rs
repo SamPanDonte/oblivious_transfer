@@ -110,14 +110,8 @@ pub enum UserMessageError {
 
 /// Message sent between peers. Has between less than 1000 characters.
 #[repr(transparent)]
-#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct UserMessage(String);
-
-impl Default for UserMessage {
-    fn default() -> Self {
-        Self(String::new())
-    }
-}
 
 impl Deref for UserMessage {
     type Target = str;
@@ -161,7 +155,7 @@ impl TextBuffer for UserMessage {
     }
 
     fn insert_text(&mut self, text: &str, char_index: usize) -> usize {
-        let text = &text[..(1000 - self.0.len())];
+        let text = &text[..text.len().min(1000 - self.0.len())];
         self.0.insert_text(text, char_index)
     }
 

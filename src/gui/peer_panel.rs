@@ -73,4 +73,9 @@ impl PeerPanel {
     pub fn clear_peers(&mut self) {
         self.0.clear();
     }
+
+    /// Get peer by socket address.
+    pub fn get_peer(&self, addr: &SocketAddr) -> Option<Peer> {
+        self.0.get(addr).cloned()
+    }
 }

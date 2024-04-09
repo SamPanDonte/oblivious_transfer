@@ -1,10 +1,11 @@
+use std::net::SocketAddr;
 use std::thread::{JoinHandle, spawn};
 
 use eframe::egui::Context;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tracing::error;
 
-use super::{Action, Event, NetworkError, NetworkTask, Username};
+use super::{Action, Event, NetworkError, NetworkTask, Result, UserMessage, Username};
 
 static CHANNEL_SIZE: usize = 100;
 
@@ -38,18 +39,24 @@ impl NetworkHost {
     }
 
     /// Broadcast message to receive peers.
-    pub fn refresh_hosts(&self) -> Result<(), NetworkError> {
+    pub fn refresh_hosts(&self) -> Result<()> {
         Ok(self.sender.blocking_send(Action::Broadcast)?)
     }
 
     /// Disconnect from network and clean up resources.
-    pub fn disconnect(self) -> Result<(), NetworkError> {
+    pub fn disconnect(self) -> Result<()> {
         if !self.sender.is_closed() {
             self.sender.blocking_send(Action::Disconnect)?;
         }
         self.join_handle
             .join()
             .map_err(|_| NetworkError::TaskPanic)?;
+        Ok(())
+    }
+
+    /// Send a message to address.
+    pub fn send(&mut self, m0: UserMessage, m1: UserMessage, addr: SocketAddr) -> Result<()> {
+        self.sender.blocking_send(Action::Send(addr, m0, m1))?;
         Ok(())
     }
 

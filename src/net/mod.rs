@@ -15,6 +15,8 @@ mod message;
 mod peer;
 mod task;
 
+type Result<T> = std::result::Result<T, NetworkError>;
+
 #[derive(Debug, Error)]
 pub enum NetworkError {
     #[error("Network task has ended")]
@@ -49,7 +51,7 @@ pub enum Event {
     Error(NetworkError),
     Connected(Peer),
     Disconnected(SocketAddr),
-    Message(String),
+    Message(SocketAddr, String),
 }
 
 /// Actions user can perform.
@@ -57,4 +59,5 @@ pub enum Event {
 enum Action {
     Broadcast,
     Disconnect,
+    Send(SocketAddr, UserMessage, UserMessage),
 }
