@@ -1,8 +1,8 @@
 use eframe::egui::{self, FontId, TextBuffer, TextEdit, Ui, Widget};
-use p256::elliptic_curve::{Field, PrimeField};
 use p256::elliptic_curve::generic_array::GenericArray;
 use p256::elliptic_curve::point::AffineCoordinates;
 use p256::elliptic_curve::sec1::ToEncodedPoint;
+use p256::elliptic_curve::{Field, PrimeField};
 use p256::ProjectivePoint;
 use rand::thread_rng;
 use sha2::{Digest, Sha256};

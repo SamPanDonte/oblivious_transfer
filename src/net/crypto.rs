@@ -1,6 +1,6 @@
 use libaes::Cipher;
+use p256::elliptic_curve::{sec1::ToEncodedPoint, Field};
 use p256::{ProjectivePoint as CurvePoint, Scalar};
-use p256::elliptic_curve::{Field, sec1::ToEncodedPoint};
 use rand::{random, thread_rng};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
