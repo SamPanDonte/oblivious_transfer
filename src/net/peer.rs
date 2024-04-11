@@ -1,5 +1,5 @@
 use std::net::SocketAddr;
-use std::thread::{JoinHandle, spawn};
+use std::thread::{spawn, JoinHandle};
 
 use eframe::egui::Context;
 use p256::Scalar;

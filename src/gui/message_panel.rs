@@ -1,11 +1,11 @@
 use std::collections::hash_map::Entry;
 use std::net::SocketAddr;
 
+use eframe::egui::ahash::HashMap;
 use eframe::egui::{
     Align, Button, CentralPanel, Layout, ScrollArea, TextEdit, TopBottomPanel, Ui, ViewportBuilder,
     ViewportId, Widget, WidgetText,
 };
-use eframe::egui::ahash::HashMap;
 use egui_tiles::{Behavior, SimplificationOptions, Tabs, Tile, TileId, Tiles, Tree, UiResponse};
 use p256::elliptic_curve::generic_array::GenericArray;
 use p256::elliptic_curve::PrimeField;
@@ -94,6 +94,7 @@ impl MessagePanel {
         for id in ids {
             self.tree.tiles.remove(id);
         }
+        self.windows.clear();
     }
 
     fn show_windows(&mut self, ui: &mut Ui) {
