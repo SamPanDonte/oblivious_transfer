@@ -1,5 +1,6 @@
 use eframe::egui::Ui;
 use local_ip_address::local_ip;
+use tracing::error;
 
 use crate::net::{NetworkError, NetworkHost, Username};
 
@@ -73,6 +74,17 @@ impl TopPanel {
             Some(network_host)
         } else {
             None
+        }
+    }
+
+    /// Clean up resources on exit.
+    pub fn on_exit(&mut self) {
+        let mut host = TopPanelInner::Username(String::new());
+        std::mem::swap(&mut host, &mut self.0);
+        if let TopPanelInner::Network(host) = host {
+            if let Err(err) = host.disconnect() {
+                error!("{err}");
+            }
         }
     }
 }

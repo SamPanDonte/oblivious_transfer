@@ -85,11 +85,6 @@ impl Peer {
     pub fn address(&self) -> SocketAddr {
         self.address
     }
-
-    /// Get the name of the peer.
-    pub fn name(&self) -> Option<&Username> {
-        self.name.as_ref()
-    }
 }
 
 impl std::fmt::Display for Peer {

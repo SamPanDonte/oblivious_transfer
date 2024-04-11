@@ -1,6 +1,7 @@
 use std::error::Error;
 
 use eframe::egui::{Align2, CentralPanel, Pos2, SidePanel, TopBottomPanel, WidgetText};
+use eframe::glow::Context;
 use eframe::{egui, Frame};
 use egui_toast::{Toast, ToastKind, ToastOptions, Toasts};
 use tracing::error;
@@ -82,6 +83,10 @@ impl eframe::App for App {
         });
 
         self.toast.show(ctx);
+    }
+
+    fn on_exit(&mut self, _: Option<&Context>) {
+        self.top_panel.on_exit();
     }
 }
 
