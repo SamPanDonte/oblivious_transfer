@@ -6,17 +6,25 @@ edition = "2021"
 rust-version = "1.77"
 
 [dependencies]
-libaes = "0.7.0"
-sha2 = "0.10.8"
-p256 = "0.13.2"
-rand = "0.8.5"
-eframe = "0.27.1"
-egui-toast = "0.13"
-egui_tiles = "0.8"
-hex = "0.4.3"
-tokio = { version = "1.37", features = ["rt", "macros", "net", "time", "sync"] }
+eframe = { version = "0.27", optional = true }
+egui_tiles = { version = "0.8", optional = true }
+egui-toast = { version = "0.13", optional = true }
+hex = "0.4"
+libaes = "0.7"
 local-ip-address = "0.6"
 network-interface = "1.1"
+p256 = "0.13"
+rand = "0.8"
+sha2 = "0.10"
 thiserror = "1.0"
+tokio = { version = "1.37", features = ["rt", "macros", "net", "time", "sync"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
+
+[features]
+default = ["gui"]
+gui = ["eframe", "egui_tiles", "egui-toast"]
+
+[profile.release]
+codegen-units = 1
+lto = true
