@@ -1,10 +1,11 @@
 use std::net::SocketAddr;
 use std::thread::{spawn, JoinHandle};
 
-use eframe::egui::Context;
 use p256::Scalar;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tracing::error;
+
+use crate::UiContext as Context;
 
 use super::{Action, Event, NetworkError, NetworkTask, Result, UserMessage, Username};
 

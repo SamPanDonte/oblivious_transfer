@@ -3,6 +3,7 @@ use local_ip_address::local_ip;
 use tracing::error;
 
 use crate::net::{NetworkError, NetworkHost, Username};
+use crate::UiContext;
 
 static PORT: u16 = 12345;
 
@@ -52,7 +53,7 @@ impl TopPanel {
 
         match action {
             Action::Connect(username) => {
-                let ctx = ui.ctx().clone();
+                let ctx = UiContext::new(ui.ctx().clone());
                 self.0 = TopPanelInner::Network(NetworkHost::new(ctx, username, PORT));
             }
             Action::Disconnect(username) => {

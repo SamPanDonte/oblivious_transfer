@@ -1,6 +1,7 @@
 use std::net::SocketAddr;
 use std::ops::{Deref, Range};
 
+#[cfg(feature = "gui")]
 use eframe::egui::TextBuffer;
 use thiserror::Error;
 
@@ -140,6 +141,7 @@ impl std::fmt::Display for UserMessage {
     }
 }
 
+#[cfg(feature = "gui")]
 impl TextBuffer for UserMessage {
     fn is_mutable(&self) -> bool {
         true

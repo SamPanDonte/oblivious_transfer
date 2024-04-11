@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 use std::net::SocketAddr;
 
-use eframe::egui::Context;
 use local_ip_address::local_ip;
 use tokio::select;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tracing::{error, warn};
+
+use crate::UiContext as Context;
 
 use super::{Action, Event, Message, MessageState, NetworkError, OTMPSocket, Peer, Username};
 
