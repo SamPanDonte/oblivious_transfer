@@ -1,7 +1,8 @@
 use std::net::SocketAddr;
-use std::thread::{spawn, JoinHandle};
+use std::thread::{JoinHandle, spawn};
 
 use eframe::egui::Context;
+use p256::Scalar;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tracing::error;
 
@@ -55,8 +56,14 @@ impl NetworkHost {
     }
 
     /// Send a message to address.
-    pub fn send(&mut self, m0: UserMessage, m1: UserMessage, addr: SocketAddr) -> Result<()> {
-        self.sender.blocking_send(Action::Send(addr, m0, m1))?;
+    pub fn send(
+        &mut self,
+        m0: UserMessage,
+        m1: UserMessage,
+        addr: SocketAddr,
+        a: Option<Scalar>,
+    ) -> Result<()> {
+        self.sender.blocking_send(Action::Send(addr, m0, m1, a))?;
         Ok(())
     }
 

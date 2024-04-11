@@ -81,9 +81,9 @@ impl eframe::App for Application {
             .inner_margin(egui::Margin::default());
 
         egui::CentralPanel::default().frame(frame).show(ctx, |ui| {
-            if let Some((addr, m0, m1)) = self.message_panel.show(ui) {
+            if let Some((addr, m0, m1, a)) = self.message_panel.show(ui) {
                 if let Some(host) = self.top_panel.get_network_host() {
-                    if let Err(error) = host.send(m0, m1, addr) {
+                    if let Err(error) = host.send(m0, m1, addr, a) {
                         self.toast.add(Toast {
                             kind: ToastKind::Error,
                             text: error.to_string().into(),

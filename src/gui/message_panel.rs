@@ -1,12 +1,15 @@
 use std::collections::hash_map::Entry;
 use std::net::SocketAddr;
 
-use eframe::egui::ahash::HashMap;
 use eframe::egui::{
-    Align, CentralPanel, Layout, ScrollArea, TextEdit, TopBottomPanel, Ui, ViewportBuilder,
+    Align, Button, CentralPanel, Layout, ScrollArea, TextEdit, TopBottomPanel, Ui, ViewportBuilder,
     ViewportId, Widget, WidgetText,
 };
+use eframe::egui::ahash::HashMap;
 use egui_tiles::{Behavior, SimplificationOptions, Tabs, Tile, TileId, Tiles, Tree, UiResponse};
+use p256::elliptic_curve::generic_array::GenericArray;
+use p256::elliptic_curve::PrimeField;
+use p256::Scalar;
 
 use crate::net::{Peer, UserMessage};
 
@@ -37,7 +40,10 @@ impl MessagePanel {
     }
 
     /// Show the message panel. Returns data if a message is sent or received.
-    pub fn show(&mut self, ui: &mut Ui) -> Option<(SocketAddr, UserMessage, UserMessage)> {
+    pub fn show(
+        &mut self,
+        ui: &mut Ui,
+    ) -> Option<(SocketAddr, UserMessage, UserMessage, Option<Scalar>)> {
         let mut behaviour = Behaviour(&mut self.messages, &mut self.action);
         self.tree.ui(&mut behaviour, ui);
         self.show_windows(ui);
@@ -46,7 +52,7 @@ impl MessagePanel {
         std::mem::swap(&mut action, &mut self.action);
 
         match action {
-            Action::Send(addr, m0, m1) => Some((addr, m0, m1)),
+            Action::Send(addr, m0, m1, a) => Some((addr, m0, m1, a)),
             Action::CloseWindow(id) => {
                 self.windows.remove(&id);
                 None
@@ -227,7 +233,7 @@ impl Pane {
 
 #[derive(Debug, Default, Eq, PartialEq)]
 enum Action {
-    Send(SocketAddr, UserMessage, UserMessage),
+    Send(SocketAddr, UserMessage, UserMessage, Option<Scalar>),
     CloseWindow(TileId),
     TakeOut(TileId),
     TakeIn(TileId),
@@ -241,6 +247,8 @@ struct MessagePane {
     peer: Peer,
     m0: UserMessage,
     m1: UserMessage,
+    custom_a: bool,
+    a: String,
 }
 
 impl MessagePane {
@@ -249,19 +257,22 @@ impl MessagePane {
             peer,
             m0: Default::default(),
             m1: Default::default(),
+            custom_a: Default::default(),
+            a: Default::default(),
         }
     }
 }
 
 impl MessagePane {
-    pub(super) fn show(&mut self, ui: &mut Ui, id: TileId, messages: &mut Messages) -> Action {
+    fn show(&mut self, ui: &mut Ui, id: TileId, messages: &mut Messages) -> Action {
         let peer = &messages.peer;
         let mut result = Default::default();
 
         let panel_id = format!("bottom_panel_{peer}_{id:?}");
         TopBottomPanel::bottom(panel_id).show_inside(ui, |ui| {
             ui.with_layout(Layout::right_to_left(Align::BOTTOM), |ui| {
-                if ui.button("Send").clicked() {
+                let button = Button::new("Send");
+                if ui.add_enabled(self.is_valid(), button).clicked() {
                     let mut new_m0 = UserMessage::default();
                     let mut new_m1 = UserMessage::default();
 
@@ -271,7 +282,17 @@ impl MessagePane {
                     let message = Message::Sent(new_m0.to_string(), new_m1.to_string());
                     messages.data.push(message);
 
-                    result = Action::Send(peer.address(), new_m0, new_m1);
+                    let a = if self.custom_a {
+                        let mut buffer = [0; 32];
+                        let bytes = hex::decode(&self.a).unwrap();
+                        buffer[..bytes.len()].copy_from_slice(&bytes);
+                        let buffer = GenericArray::from(buffer);
+                        Some(Scalar::from_repr(buffer).unwrap())
+                    } else {
+                        None
+                    };
+
+                    result = Action::Send(peer.address(), new_m0, new_m1, a);
                 }
                 ui.vertical(|ui| {
                     TextEdit::singleline(&mut self.m0)
@@ -280,6 +301,12 @@ impl MessagePane {
                     TextEdit::singleline(&mut self.m1)
                         .desired_width(ui.available_width())
                         .ui(ui);
+                    ui.horizontal(|ui| {
+                        ui.checkbox(&mut self.custom_a, "Custom scalar:");
+                        let edit =
+                            TextEdit::singleline(&mut self.a).desired_width(ui.available_width());
+                        ui.add_enabled(self.custom_a, edit);
+                    });
                 });
             });
         });
@@ -311,6 +338,14 @@ impl MessagePane {
         });
 
         result
+    }
+
+    fn is_valid(&self) -> bool {
+        if self.custom_a {
+            hex::decode(&self.a).is_ok()
+        } else {
+            true
+        }
     }
 }
 

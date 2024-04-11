@@ -1,6 +1,6 @@
 use libaes::Cipher;
-use p256::elliptic_curve::{sec1::ToEncodedPoint, Field};
 use p256::{ProjectivePoint as CurvePoint, Scalar};
+use p256::elliptic_curve::{Field, sec1::ToEncodedPoint};
 use rand::{random, thread_rng};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -25,8 +25,8 @@ pub(super) enum MessageState {
 
 impl MessageState {
     /// Handle messages sent by the client.
-    pub fn send_message(m0: UserMessage, m1: UserMessage) -> (CurvePoint, Self) {
-        let a = Scalar::random(thread_rng());
+    pub fn send_message(m0: UserMessage, m1: UserMessage, a: Option<Scalar>) -> (CurvePoint, Self) {
+        let a = a.unwrap_or_else(|| Scalar::random(thread_rng()));
         let point = CurvePoint::GENERATOR * a;
         (point, MessageState::GreetSent(a, point, m0, m1))
     }

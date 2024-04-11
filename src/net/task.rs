@@ -148,8 +148,8 @@ impl NetworkTask {
                 self.socket.broadcast(message).await
             }
             Action::Disconnect => self.socket.broadcast(Message::BroadcastBye).await,
-            Action::Send(addr, m0, m1) => {
-                let (message, state) = MessageState::send_message(m0, m1);
+            Action::Send(addr, m0, m1, a) => {
+                let (message, state) = MessageState::send_message(m0, m1, a);
                 self.states.insert(addr, state);
                 self.socket.send_to(Message::Greet(message), addr).await?;
                 Ok(())

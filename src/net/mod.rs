@@ -1,5 +1,6 @@
 use std::net::SocketAddr;
 
+use p256::Scalar;
 use thiserror::Error;
 use tokio::sync::mpsc::error::SendError;
 
@@ -59,5 +60,5 @@ pub enum Event {
 enum Action {
     Broadcast,
     Disconnect,
-    Send(SocketAddr, UserMessage, UserMessage),
+    Send(SocketAddr, UserMessage, UserMessage, Option<Scalar>),
 }
