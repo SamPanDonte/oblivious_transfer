@@ -23,12 +23,12 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: check
-          args: -F tui
+          args: -F tui --no-default-features
       - name: Check GUI
         uses: actions-rs/cargo@v1
         with:
           command: check
-          args: -F gui
+          args: -F gui --no-default-features
 
   test:
     name: Test Suite
