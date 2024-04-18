@@ -77,3 +77,24 @@ jobs:
         with:
           command: clippy
           args: -- -D warnings
+
+  build:
+    name: Build Artifact
+    runs-on: windows-latest
+    steps:
+     - uses: actions/checkout@v2
+     - uses: actions-rs/toolchain@v1
+       with:
+        profile: minimal
+        toolchain: stable
+        override: true
+        components: clippy
+     - uses: actions-rs/cargo@v1
+       with:
+         command: build
+         args: -r
+     - name: Upload artifacts
+       uses: actions/upload-artifact@v4
+       with:
+         name: oblivious_transfer
+         path: target/release/oblivious_transfer
