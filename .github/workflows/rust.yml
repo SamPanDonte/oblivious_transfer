@@ -19,10 +19,16 @@ jobs:
           profile: minimal
           toolchain: stable
           override: true
-      - uses: actions-rs/cargo@v1
+      - name: Check TUI
+        uses: actions-rs/cargo@v1
         with:
           command: check
-          args: --all-features
+          args: -F tui
+      - name: Check GUI
+        uses: actions-rs/cargo@v1
+        with:
+          command: check
+          args: -F gui
 
   test:
     name: Test Suite
